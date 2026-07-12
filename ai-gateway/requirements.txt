@@ -11,3 +11,4 @@ openai==1.98.0
 python-jose[cryptography]==3.5.0
 passlib[bcrypt]==1.7.4
 python-multipart==0.0.20
+mcp[cli]>=1.27,<2

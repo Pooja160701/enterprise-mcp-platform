@@ -13,6 +13,8 @@ class Settings(BaseSettings):
 
     OPENAI_API_KEY: str = ""
 
+    OPENAI_MODEL: str = "gpt-5"
+
     POSTGRES_USER: str = "postgres"
 
     POSTGRES_PASSWORD: str = "postgres"

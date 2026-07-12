@@ -1,0 +1,66 @@
+services:
+
+  api:
+
+    build:
+      context: ./ai-gateway
+
+    container_name: enterprise-api
+
+    ports:
+      - "8000:8000"
+
+    env_file:
+      - .env
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+      redis:
+        condition: service_started
+
+    volumes:
+      - ./ai-gateway:/app
+
+    restart: unless-stopped
+
+  postgres:
+
+    image: postgres:16
+
+    container_name: enterprise-postgres
+
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: enterprise_mcp
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+
+    image: redis:7
+
+    container_name: enterprise-redis
+
+    ports:
+      - "6379:6379"
+
+    restart: unless-stopped
+
+volumes:
+
+  postgres_data:

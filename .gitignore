@@ -216,3 +216,34 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Node
+# Node
+node_modules/
+.next/
+coverage/
+
+# Environment
+.env.*
+
+# IDE
+.vscode/
+.idea/
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+
+# Kubernetes
+*.kubeconfig
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Database
+*.db
+
+# Misc
+.cache/

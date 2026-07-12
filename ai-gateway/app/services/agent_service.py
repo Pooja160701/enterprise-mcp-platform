@@ -17,12 +17,11 @@ class AgentService:
 
     async def chat(self, message: str):
 
-        tools = await self.mcp.list_tools()
-
         conversation = ConversationService.create()
 
         telemetry = TelemetryService()
         telemetry.begin()
+        telemetry.start_step("tool_selection")
 
         tools = await self.mcp.list_tools()
 
@@ -31,17 +30,28 @@ class AgentService:
             tools,
         )
 
-        tool = json.loads(decision)
+        telemetry.end_step("tool_selection")
+
+        try:
+            tool = json.loads(decision)
+        except json.JSONDecodeError:
+            raise ValueError(
+                f"Invalid JSON returned by LLM: {decision}"
+            )
 
         arguments = ArgumentResolver.resolve(
             tool["tool"],
             tool["arguments"],
         )
 
+        telemetry.start_step("tool_execution")
+
         result = await self.router.execute(
             tool["tool"],
             arguments,
         )
+
+        telemetry.end_step("tool_execution")
 
         tool_text = ""
 
@@ -52,14 +62,18 @@ class AgentService:
                 if hasattr(block, "text")
             )
 
+        telemetry.start_step("response_generation")
+
         answer = await self.openai.summarize_result(
             message,
             tool["tool"],
             tool_text,
         )
 
-        duration = telemetry.end()
-        
+        telemetry.end_step("response_generation")
+
+        execution = telemetry.finish()
+
         return {
 
             "conversation": conversation,
@@ -70,40 +84,43 @@ class AgentService:
 
                 "status": "success",
 
-                "duration_ms": duration,
+                "duration_ms": execution["total"],
 
                 "tool": tool["tool"],
 
-                "server": "filesystem"
+                "server": "filesystem",
+
+                "started_at": execution["started_at"],
+
+                "completed_at": execution["completed_at"]
 
             },
 
             "steps": [
 
                 {
-
-                    "name": "LLM Tool Selection",
-
-                    "status": "completed"
-
+                    "id": 1,
+                    "title": "Tool Selection",
+                    "description": "GPT selected the MCP tool.",
+                    "status": "completed",
+                    "duration_ms": execution["steps"]["tool_selection"]
                 },
 
                 {
-
-                    "name": "MCP Tool Execution",
-
-                    "status": "completed"
-
+                    "id": 2,
+                    "title": "Tool Execution",
+                    "description": f"Executed {tool['tool']} on Filesystem MCP.",
+                    "status": "completed",
+                    "duration_ms": execution["steps"]["tool_execution"]
                 },
 
                 {
-
-                    "name": "LLM Response Generation",
-
-                    "status": "completed"
-
+                    "id": 3,
+                    "title": "Response Generation",
+                    "description": "Generated the final answer.",
+                    "status": "completed",
+                    "duration_ms": execution["steps"]["response_generation"]
                 }
 
             ]
-
         }

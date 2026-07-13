@@ -1,13 +1,19 @@
-from core.mcp.manager import MCPManager
+from core.mcp.executor import MCPExecutor
 
 
 class ToolRouter:
 
     def __init__(self):
-        self.manager = MCPManager()
+        self.executor = MCPExecutor()
 
-    async def execute(self, tool_name: str, arguments: dict):
-        return await self.manager.execute_tool(
-            tool_name,
-            arguments,
+    async def execute(
+        self,
+        tool: str,
+        arguments: dict,
+        server: str,
+    ):
+        return await self.executor.execute(
+            server=server,
+            tool=tool,
+            arguments=arguments,
         )

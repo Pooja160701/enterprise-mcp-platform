@@ -1,60 +1,41 @@
-from contextlib import AsyncExitStack
-
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
-
-from core.mcp.config import FILESYSTEM_SERVER
+from core.mcp.registry import MCPRegistry
+from core.mcp.session import MCPSession
 
 
 class MCPManager:
+
     def __init__(self):
-        self.session = None
-        self.exit_stack = AsyncExitStack()
+        self.registry = MCPRegistry()
 
-    async def connect(self):
-        if self.session:
-            return self.session
+    async def list_tools(
+        self,
+        server_name: str = "filesystem",
+    ):
 
-        server_params = StdioServerParameters(
-            command=FILESYSTEM_SERVER.command,
-            args=FILESYSTEM_SERVER.args,
-        )
+        server = self.registry.get(server_name)
 
-        read_stream, write_stream = await self.exit_stack.enter_async_context(
-            stdio_client(server_params)
-        )
+        if server is None:
+            raise ValueError(f"Unknown server: {server_name}")
 
-        self.session = await self.exit_stack.enter_async_context(
-            ClientSession(read_stream, write_stream)
-        )
+        session = MCPSession(server)
 
-        await self.session.initialize()
+        return await session.list_tools()
 
-        return self.session
+    async def execute_tool(
+        self,
+        tool_name: str,
+        arguments: dict,
+        server_name: str = "filesystem",
+    ):
 
-    async def list_tools(self):
-        session = await self.connect()
+        server = self.registry.get(server_name)
 
-        result = await session.list_tools()
+        if server is None:
+            raise ValueError(f"Unknown server: {server_name}")
 
-        return [
-            {
-                "name": tool.name,
-                "description": tool.description,
-            }
-            for tool in result.tools
-        ]
+        session = MCPSession(server)
 
-    async def execute_tool(self, tool_name: str, arguments: dict):
-        session = await self.connect()
-
-        result = await session.call_tool(
+        return await session.call_tool(
             tool_name,
-            arguments=arguments,
+            arguments,
         )
-
-        return result
-    
-    async def close(self):
-        await self.exit_stack.aclose()
-        self.session = None

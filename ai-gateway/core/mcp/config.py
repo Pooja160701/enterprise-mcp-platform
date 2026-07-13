@@ -1,26 +1,88 @@
 from dataclasses import dataclass
-from pathlib import Path
-import os
+from typing import Optional
 
-
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DOCS_PATH = PROJECT_ROOT / "docs"
 
 @dataclass
-class MCPServer:
+class MCPServerConfig:
     name: str
-    command: str
-    args: list[str]
+    type: str  # external | python
+    command: Optional[str] = None
+    args: Optional[list[str]] = None
 
-OPENAI_API_KEY: str = ""
-OPENAI_MODEL: str = "gpt-5"
 
-FILESYSTEM_SERVER = MCPServer(
-    name="filesystem",
-    command="npx",
-    args=[
-        "-y",
-        "@modelcontextprotocol/server-filesystem",
-        str(DOCS_PATH),
-    ],
-)
+MCP_SERVERS = {
+
+    "filesystem": MCPServerConfig(
+        name="filesystem",
+        type="external",
+        command="npx",
+        args=[
+            "-y",
+            "@modelcontextprotocol/server-filesystem",
+            "/app/docs",
+        ],
+    ),
+
+    "docker": MCPServerConfig(
+        name="docker",
+        type="python",
+        command="python",
+        args=[
+            "/mcp-servers/docker/server.py",
+        ],
+    ),
+
+    "github": MCPServerConfig(
+        name="github",
+        type="python",
+        command="python",
+        args=[
+            "../mcp-servers/github/server.py",
+        ],
+    ),
+
+    "kubernetes": MCPServerConfig(
+        name="kubernetes",
+        type="python",
+        command="python",
+        args=[
+            "../mcp-servers/kubernetes/server.py",
+        ],
+    ),
+
+    "postgres": MCPServerConfig(
+        name="postgres",
+        type="python",
+        command="python",
+        args=[
+            "../mcp-servers/postgres/server.py",
+        ],
+    ),
+
+    "prometheus": MCPServerConfig(
+        name="prometheus",
+        type="python",
+        command="python",
+        args=[
+            "../mcp-servers/prometheus/server.py",
+        ],
+    ),
+
+    "grafana": MCPServerConfig(
+        name="grafana",
+        type="python",
+        command="python",
+        args=[
+            "../mcp-servers/grafana/server.py",
+        ],
+    ),
+
+    "aws": MCPServerConfig(
+        name="aws",
+        type="python",
+        command="python",
+        args=[
+            "../mcp-servers/aws/server.py",
+        ],
+    ),
+}

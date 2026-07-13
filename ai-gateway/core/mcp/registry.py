@@ -1,12 +1,16 @@
+from core.mcp.config import MCP_SERVERS
+
+
 class MCPRegistry:
-    def __init__(self):
-        self._servers = {}
 
-    def register(self, name, session):
-        self._servers[name] = session
+    @staticmethod
+    def get(name: str):
+        return MCP_SERVERS.get(name)
 
-    def get(self, name):
-        return self._servers.get(name)
+    @staticmethod
+    def all():
+        return list(MCP_SERVERS.values())
 
-    def list_servers(self):
-        return list(self._servers.keys())
+    @staticmethod
+    def names():
+        return list(MCP_SERVERS.keys())

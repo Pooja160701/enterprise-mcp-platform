@@ -22,6 +22,8 @@ services:
 
     volumes:
       - ./ai-gateway:/app
+      - ./mcp-servers:/mcp-servers
+      - /var/run/docker.sock:/var/run/docker.sock
 
     restart: unless-stopped
 

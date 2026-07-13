@@ -5,6 +5,7 @@ from app.services.tool_router import ToolRouter
 from app.services.argument_resolver import ArgumentResolver
 from app.services.conversation_service import ConversationService
 from app.services.telemetry_service import TelemetryService
+from app.services.tool_selector import ToolSelector
 from core.mcp.manager import MCPManager
 
 
@@ -23,32 +24,40 @@ class AgentService:
         telemetry.begin()
         telemetry.start_step("tool_selection")
 
-        tools = await self.mcp.list_tools()
+        tools = await self.mcp.list_tools(
+            server_name="filesystem"
+        )
 
-        decision = await self.openai.choose_tool(
+        candidate_tools = ToolSelector.select(
             message,
             tools,
         )
 
+        decision = await self.openai.choose_tool(
+            message,
+            candidate_tools,
+)
+
         telemetry.end_step("tool_selection")
 
         try:
-            tool = json.loads(decision)
+            plan = json.loads(decision)
         except json.JSONDecodeError:
             raise ValueError(
                 f"Invalid JSON returned by LLM: {decision}"
             )
 
         arguments = ArgumentResolver.resolve(
-            tool["tool"],
-            tool["arguments"],
+            plan["tool"],
+            plan["arguments"],
         )
 
         telemetry.start_step("tool_execution")
 
         result = await self.router.execute(
-            tool["tool"],
-            arguments,
+            tool=plan["tool"],
+            arguments=arguments,
+            server=plan["server"],
         )
 
         telemetry.end_step("tool_execution")
@@ -66,7 +75,7 @@ class AgentService:
 
         answer = await self.openai.summarize_result(
             message,
-            tool["tool"],
+            plan["tool"],
             tool_text,
         )
 
@@ -86,9 +95,9 @@ class AgentService:
 
                 "duration_ms": execution["total"],
 
-                "tool": tool["tool"],
+                "tool": plan["tool"],
 
-                "server": "filesystem",
+                "server": plan["server"],
 
                 "started_at": execution["started_at"],
 
@@ -109,7 +118,7 @@ class AgentService:
                 {
                     "id": 2,
                     "title": "Tool Execution",
-                    "description": f"Executed {tool['tool']} on Filesystem MCP.",
+                    "description": f"Executed {plan['tool']} on {plan['server']} MCP.",
                     "status": "completed",
                     "duration_ms": execution["steps"]["tool_execution"]
                 },

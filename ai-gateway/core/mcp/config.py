@@ -25,7 +25,7 @@ MCP_SERVERS = {
 
     "docker": MCPServerConfig(
         name="docker",
-        type="python",
+        type="external",
         command="python",
         args=[
             "/mcp-servers/docker/server.py",
@@ -34,10 +34,10 @@ MCP_SERVERS = {
 
     "github": MCPServerConfig(
         name="github",
-        type="python",
+        type="external",
         command="python",
         args=[
-            "../mcp-servers/github/server.py",
+            "/mcp-servers/github/server.py",
         ],
     ),
 

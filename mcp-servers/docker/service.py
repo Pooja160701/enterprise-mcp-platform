@@ -1,5 +1,10 @@
 import docker
 
+PROTECTED_CONTAINERS = {
+    "enterprise-api",
+    "enterprise-postgres",
+    "enterprise-redis",
+}
 
 class DockerService:
 
@@ -93,27 +98,29 @@ class DockerService:
 
     def stop_container(self, name: str):
 
+        if name in PROTECTED_CONTAINERS:
+            return {
+                "success": False,
+                "error": f"{name} is a protected system container and cannot be stopped."
+            }
+
         try:
-
             container = self.client.containers.get(name)
-
             container.stop()
 
             return {
                 "success": True,
                 "container": name,
-                "status": "stopped",
+                "status": "stopped"
             }
 
         except docker.errors.NotFound:
-
             return {
                 "success": False,
                 "error": f"Container '{name}' not found."
             }
 
         except Exception as e:
-
             return {
                 "success": False,
                 "error": str(e)

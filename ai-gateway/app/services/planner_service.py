@@ -1,44 +1,30 @@
 import json
 
 from app.services.openai_service import OpenAIService
+from app.services.prompt_builder import PromptBuilder
+from app.services.plan_validator import PlanValidator
 
 
 class PlannerService:
 
     def __init__(self):
+
         self.openai = OpenAIService()
 
     async def create_plan(
         self,
         message: str,
-        tools: list,
+        tools: list[dict],
     ):
 
-        decision = await self.openai.choose_tool(
+        prompt = PromptBuilder.build_planner_prompt(
             message,
             tools,
         )
 
-        try:
-            plan = json.loads(decision)
+        response = await self.openai.chat(prompt)
 
-        except json.JSONDecodeError:
+        print("\nPlanner Raw Output\n")
+        print(response)
 
-            raise ValueError(
-                f"Invalid JSON returned by OpenAI:\n\n{decision}"
-            )
-
-        #
-        # Allow GPT to return either:
-        #
-        # { ... }
-        #
-        # or
-        #
-        # [ ... ]
-        #
-
-        if isinstance(plan, dict):
-            return [plan]
-
-        return plan
+        return PlanValidator.validate(response)

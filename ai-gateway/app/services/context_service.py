@@ -1,49 +1,69 @@
-from app.services.memory_service import MemoryService
-
-
 class ContextService:
+    """
+    Extracts reusable context from tool execution results.
+    """
 
     @staticmethod
-    def build(
+    def update(memory, step, result):
 
-        conversation,
+        tool = step["tool"]
 
-    ):
+        #
+        # GitHub
+        #
 
-        memory = MemoryService.conversation(
+        if tool == "list_repositories":
 
-            conversation
+            if isinstance(result, list) and result:
 
-        )
+                memory["repository"] = result[0]["full_name"]
 
-        if not memory:
+        #
+        # Filesystem
+        #
 
-            return ""
+        elif tool == "search_files":
 
-        context = ""
+            if isinstance(result, dict):
 
-        if "last_message" in memory:
+                first = result.get("first_match")
 
-            context += f"""
+                if first:
 
-Previous User Request
+                    memory["last_file"] = first
 
-{memory["last_message"]}
+        elif tool == "read_text_file":
 
-"""
+            path = step["arguments"].get("path")
 
-        if "last_results" in memory:
+            if path:
 
-            context += """
+                memory["last_file"] = path
 
-Previous Results
+        #
+        # Docker
+        #
 
-"""
+        elif tool == "list_running_containers":
 
-            context += str(
+            if isinstance(result, list) and result:
 
-                memory["last_results"]
+                memory["container"] = result[0]["name"]
 
-            )
+        elif tool in {
 
-        return context
+            "start_container",
+
+            "stop_container",
+
+            "container_logs",
+
+        }:
+
+            name = step["arguments"].get("name")
+
+            if name:
+
+                memory["container"] = name
+
+        return memory

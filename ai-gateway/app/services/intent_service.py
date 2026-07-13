@@ -1,54 +1,53 @@
+from app.services.openai_service import OpenAIService
+from app.services.intent_parser import IntentParser
+
+
 class IntentService:
+    """
+    Detects which MCP servers are relevant
+    for the user's request.
+    """
 
-    FILESYSTEM = "filesystem"
-    DOCKER = "docker"
-    GITHUB = "github"
-    GENERAL = "general"
+    SERVERS = [
+        "filesystem",
+        "docker",
+        "github",
+        "kubernetes",
+        "postgres",
+        "prometheus",
+        "grafana",
+        "aws",
+    ]
 
-    @classmethod
-    def detect(cls, message: str):
+    def __init__(self):
+        self.openai = OpenAIService()
 
-        message = message.lower()
+    async def detect(self, message: str):
 
-        docker = [
-            "container",
-            "docker",
-            "image",
-            "logs",
-            "restart",
-            "stop",
-            "start",
-        ]
+        prompt = f"""
+You are an intent classifier.
 
-        github = [
-            "repository",
-            "repo",
-            "github",
-            "branch",
-            "commit",
-            "issue",
-            "workflow",
-            "pull request",
-        ]
+Available servers:
 
-        filesystem = [
-            "file",
-            "folder",
-            "directory",
-            "read",
-            "write",
-            "create",
-            "edit",
-            "search",
-        ]
+{", ".join(self.SERVERS)}
 
-        if any(word in message for word in docker):
-            return cls.DOCKER
+User request:
 
-        if any(word in message for word in github):
-            return cls.GITHUB
+{message}
 
-        if any(word in message for word in filesystem):
-            return cls.FILESYSTEM
+Return ONLY a JSON array.
 
-        return cls.GENERAL
+Example:
+
+["filesystem"]
+
+or
+
+["github","docker"]
+
+Do not explain.
+"""
+
+        response = await self.openai.chat(prompt)
+
+        return IntentParser.parse(response)

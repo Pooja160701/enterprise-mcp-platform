@@ -1,15 +1,17 @@
 import json
 
 from app.services.argument_resolver import ArgumentResolver
+from app.services.context_service import ContextService
 from app.services.conversation_service import ConversationService
 from app.services.execution_service import ExecutionService
 from app.services.intent_service import IntentService
+from app.services.memory_service import MemoryService
 from app.services.openai_service import OpenAIService
 from app.services.planner_service import PlannerService
 from app.services.result_aggregator import ResultAggregator
 from app.services.telemetry_service import TelemetryService
 from app.services.tool_selector import ToolSelector
-from app.services.memory_service import MemoryService
+
 from core.mcp.manager import MCPManager
 
 
@@ -24,6 +26,8 @@ class AgentService:
         self.planner = PlannerService()
 
         self.executor = ExecutionService()
+
+        self.intent = IntentService()
 
     async def chat(
         self,
@@ -44,18 +48,7 @@ class AgentService:
         # ---------------------------------------------------
         #
 
-        intent = IntentService.detect(message)
-
-        servers = []
-
-        for server in self.mcp.registry.names():
-
-            try:
-                await self.mcp.list_tools(server)
-                servers.append(server)
-
-            except Exception:
-                continue
+        intent = await self.intent.detect(message)
 
         #
         # ---------------------------------------------------
@@ -67,7 +60,7 @@ class AgentService:
 
         all_tools = []
 
-        for server in servers:
+        for server in intent:
 
             try:
 
@@ -179,23 +172,33 @@ class AgentService:
             plan
         )
 
-        MemoryService.save(
-            conversation_id,
-            "last_plan",
-            plan,
-        )
+        memory = MemoryService.get_all(conversation_id)
 
-        MemoryService.save(
-            conversation_id,
-            "last_results",
-            results,
-        )
+        for step, item in zip(plan, results):
 
-        MemoryService.save(
-            conversation_id,
-            "last_message",
-            message,
-        )
+            ContextService.update(
+                memory,
+                step,
+                item["output"],
+            )
+
+            MemoryService.save(
+                conversation_id,
+                "last_plan",
+                plan,
+            )
+
+            MemoryService.save(
+                conversation_id,
+                "last_results",
+                results,
+            )
+
+            MemoryService.save(
+                conversation_id,
+                "last_message",
+                message,
+            )
 
         telemetry.end_step("tool_execution")
 

@@ -2,72 +2,50 @@ from collections import defaultdict
 
 
 class MemoryService:
+    """
+    Stores conversation-scoped context that can be
+    reused across multiple user requests.
+    """
 
     _memory = defaultdict(dict)
 
     @classmethod
     def save(
-
         cls,
-
-        conversation,
-
-        key,
-
+        conversation_id: str,
+        key: str,
         value,
-
     ):
-
-        cls._memory[conversation][key] = value
+        cls._memory[conversation_id][key] = value
 
     @classmethod
-    def load(
-
+    def get(
         cls,
-
-        conversation,
-
-        key,
-
+        conversation_id: str,
+        key: str,
+        default=None,
     ):
-
-        return cls._memory.get(
-
-            conversation,
-
-            {},
-
-        ).get(key)
+        return cls._memory[conversation_id].get(
+            key,
+            default,
+        )
 
     @classmethod
-    def conversation(
-
+    def get_all(
         cls,
-
-        conversation,
-
+        conversation_id: str,
     ):
-
         return cls._memory.get(
-
-            conversation,
-
+            conversation_id,
             {},
         )
 
     @classmethod
     def clear(
-
         cls,
-
-        conversation,
-
+        conversation_id: str,
     ):
-
         cls._memory.pop(
-
-            conversation,
-
+            conversation_id,
             None,
-
         )

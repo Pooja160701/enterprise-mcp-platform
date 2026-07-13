@@ -1,63 +1,54 @@
 class ResultAggregator:
+    """
+    Converts MCP execution results into a single
+    text block for the LLM.
+    """
 
     @staticmethod
-    def aggregate(results):
+    def aggregate(results: list) -> str:
 
         sections = []
 
         for item in results:
 
+            server = item["server"]
+            tool = item["tool"]
             result = item["result"]
 
             text = ""
 
-            if hasattr(result, "content"):
+            #
+            # MCP Response
+            #
+            if hasattr(result, "content") and result.content:
 
-                text = "\n".join(
+                blocks = []
 
-                    block.text
+                for block in result.content:
 
-                    for block in result.content
+                    if hasattr(block, "text"):
 
-                    if hasattr(block, "text")
+                        blocks.append(block.text)
 
-                )
+                text = "\n".join(blocks)
 
+            #
+            # Plain Python response
+            #
             else:
 
                 text = str(result)
 
-            sections.append({
+            sections.append(
+                "\n".join(
+                    [
+                        "=" * 60,
+                        f"SERVER : {server}",
+                        f"TOOL   : {tool}",
+                        "=" * 60,
+                        text.strip(),
+                    ]
+                )
+            )
 
-                "server": item["server"],
-
-                "tool": item["tool"],
-
-                "output": text,
-
-            })
-
-        return sections
-
-    @staticmethod
-    def to_prompt(results):
-
-        prompt = ""
-
-        for item in results:
-
-            prompt += f"""
-
-Server:
-{item["server"]}
-
-Tool:
-{item["tool"]}
-
-Output:
-
-{item["output"]}
-
-"""
-
-        return prompt
+        return "\n\n".join(sections)

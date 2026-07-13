@@ -1,10 +1,10 @@
 import json
 
-from app.services.openai_service import OpenAIService
-from app.services.tool_router import ToolRouter
 from app.services.argument_resolver import ArgumentResolver
 from app.services.conversation_service import ConversationService
+from app.services.openai_service import OpenAIService
 from app.services.telemetry_service import TelemetryService
+from app.services.tool_router import ToolRouter
 from app.services.tool_selector import ToolSelector
 from core.mcp.manager import MCPManager
 
@@ -22,35 +22,94 @@ class AgentService:
 
         telemetry = TelemetryService()
         telemetry.begin()
+
+        #
+        # -------------------------------
+        # TOOL SELECTION
+        # -------------------------------
+        #
+
         telemetry.start_step("tool_selection")
 
-        tools = await self.mcp.list_tools(
-            server_name="filesystem"
-        )
+        all_tools = []
+
+        #
+        # Filesystem Tools
+        #
+        filesystem_tools = await self.mcp.list_tools("filesystem")
+
+        for tool in filesystem_tools:
+            all_tools.append(
+                {
+                    "server": "filesystem",
+                    "name": tool.name,
+                    "description": tool.description or "",
+                }
+            )
+
+        #
+        # Docker Tools
+        #
+        docker_tools = await self.mcp.list_tools("docker")
+
+        for tool in docker_tools:
+            all_tools.append(
+                {
+                    "server": "docker",
+                    "name": tool.name,
+                    "description": tool.description or "",
+                }
+            )
 
         candidate_tools = ToolSelector.select(
             message,
-            tools,
+            all_tools,
         )
+
+        print("\nAvailable tools sent to GPT:\n")
+
+        for tool in candidate_tools:
+            print(
+                tool["server"],
+                "->",
+                tool["name"],
+            )
 
         decision = await self.openai.choose_tool(
             message,
             candidate_tools,
-)
+        )
+
+        print("\nGPT Decision:\n")
+        print(decision)
 
         telemetry.end_step("tool_selection")
 
+        #
+        # -------------------------------
+        # PARSE LLM RESPONSE
+        # -------------------------------
+        #
+
         try:
             plan = json.loads(decision)
+
         except json.JSONDecodeError:
+
             raise ValueError(
-                f"Invalid JSON returned by LLM: {decision}"
+                f"Invalid JSON returned by OpenAI:\n\n{decision}"
             )
 
         arguments = ArgumentResolver.resolve(
             plan["tool"],
-            plan["arguments"],
+            plan.get("arguments", {}),
         )
+
+        #
+        # -------------------------------
+        # EXECUTE TOOL
+        # -------------------------------
+        #
 
         telemetry.start_step("tool_execution")
 
@@ -62,21 +121,42 @@ class AgentService:
 
         telemetry.end_step("tool_execution")
 
+        #
+        # -------------------------------
+        # FORMAT TOOL OUTPUT
+        # -------------------------------
+        #
+
         tool_text = ""
 
-        if result.content:
+        if hasattr(result, "content") and result.content:
+
             tool_text = "\n".join(
+
                 block.text
+
                 for block in result.content
+
                 if hasattr(block, "text")
+
             )
+
+        else:
+
+            tool_text = str(result)
+
+        #
+        # -------------------------------
+        # RESPONSE GENERATION
+        # -------------------------------
+        #
 
         telemetry.start_step("response_generation")
 
         answer = await self.openai.summarize_result(
-            message,
-            plan["tool"],
-            tool_text,
+            user_message=message,
+            tool_name=plan["tool"],
+            tool_result=tool_text,
         )
 
         telemetry.end_step("response_generation")
@@ -95,13 +175,13 @@ class AgentService:
 
                 "duration_ms": execution["total"],
 
-                "tool": plan["tool"],
-
                 "server": plan["server"],
+
+                "tool": plan["tool"],
 
                 "started_at": execution["started_at"],
 
-                "completed_at": execution["completed_at"]
+                "completed_at": execution["completed_at"],
 
             },
 
@@ -110,26 +190,26 @@ class AgentService:
                 {
                     "id": 1,
                     "title": "Tool Selection",
-                    "description": "GPT selected the MCP tool.",
+                    "description": "AI selected the appropriate MCP server and tool.",
                     "status": "completed",
-                    "duration_ms": execution["steps"]["tool_selection"]
+                    "duration_ms": execution["steps"]["tool_selection"],
                 },
 
                 {
                     "id": 2,
                     "title": "Tool Execution",
-                    "description": f"Executed {plan['tool']} on {plan['server']} MCP.",
+                    "description": f'Executed "{plan["tool"]}" on {plan["server"]}.',
                     "status": "completed",
-                    "duration_ms": execution["steps"]["tool_execution"]
+                    "duration_ms": execution["steps"]["tool_execution"],
                 },
 
                 {
                     "id": 3,
                     "title": "Response Generation",
-                    "description": "Generated the final answer.",
+                    "description": "Generated the final response.",
                     "status": "completed",
-                    "duration_ms": execution["steps"]["response_generation"]
-                }
+                    "duration_ms": execution["steps"]["response_generation"],
+                },
 
-            ]
+            ],
         }

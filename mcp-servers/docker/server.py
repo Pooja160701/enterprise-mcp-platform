@@ -7,58 +7,64 @@ mcp = FastMCP("Docker MCP")
 service = DockerService()
 
 
-@mcp.tool()
+@mcp.tool(
+    description="List all running Docker containers."
+)
 def list_running_containers():
-    """
-    List all running Docker containers.
-    """
     return service.list_running_containers()
 
 
-@mcp.tool()
+@mcp.tool(
+    description="List every Docker container including stopped containers."
+)
+def list_all_containers():
+    return service.list_all_containers()
+
+
+@mcp.tool(
+    description="List Docker images available on the host."
+)
 def list_images():
-    """
-    List all Docker images.
-    """
     return service.list_images()
 
-@mcp.tool()
+
+@mcp.tool(
+    description="Inspect a Docker container by name."
+)
 def inspect_container(name: str):
-    """
-    Inspect one container.
-    """
     return service.inspect_container(name)
 
 
-@mcp.tool()
+@mcp.tool(
+    description="Retrieve logs from a Docker container."
+)
 def container_logs(
     name: str,
     tail: int = 50,
 ):
-    """
-    Show logs.
-    """
-    return service.container_logs(name, tail)
+    return service.container_logs(
+        name=name,
+        tail=tail,
+    )
 
 
-@mcp.tool()
+@mcp.tool(
+    description="Start a stopped Docker container."
+)
 def start_container(name: str):
-    """
-    Start container.
-    """
     return service.start_container(name)
 
 
-@mcp.tool()
+@mcp.tool(
+    description="Stop a running Docker container."
+)
 def stop_container(name: str):
-    """
-    Stop container.
-    """
     return service.stop_container(name)
+
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("Starting Docker MCP Server...")
+    print("Starting Docker MCP Server")
     print("Transport : stdio")
     print("Server    : Docker MCP")
     print("=" * 60)

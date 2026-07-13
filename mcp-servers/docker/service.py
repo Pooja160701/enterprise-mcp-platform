@@ -93,11 +93,28 @@ class DockerService:
 
     def stop_container(self, name: str):
 
-        container = self.client.containers.get(name)
+        try:
 
-        container.stop()
+            container = self.client.containers.get(name)
 
-        return {
-            "status": "stopped",
-            "container": name,
-        }
+            container.stop()
+
+            return {
+                "success": True,
+                "container": name,
+                "status": "stopped",
+            }
+
+        except docker.errors.NotFound:
+
+            return {
+                "success": False,
+                "error": f"Container '{name}' not found."
+            }
+
+        except Exception as e:
+
+            return {
+                "success": False,
+                "error": str(e)
+            }

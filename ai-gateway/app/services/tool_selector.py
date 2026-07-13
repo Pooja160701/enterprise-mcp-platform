@@ -8,10 +8,4 @@ class ToolSelector:
         message: str,
         tools: list,
     ):
-
-        ranked = ToolRanker.rank(
-            message,
-            tools,
-        )
-
-        return ranked[:5]
+        return tools

@@ -3,50 +3,93 @@ from typing import List
 
 class ToolRanker:
 
-    KEYWORDS = {
+    SERVER_KEYWORDS = {
 
-        "list_directory": [
-            "list",
-            "files",
+        "filesystem": [
+            "file",
             "folder",
             "directory",
             "docs",
-            "show files",
-        ],
-
-        "directory_tree": [
-            "tree",
-            "structure",
-            "hierarchy",
-        ],
-
-        "read_text_file": [
+            "document",
             "read",
             "open",
-            "show",
-            "display",
-            "content",
-            "file",
-        ],
-
-        "search_files": [
-            "find",
-            "search",
-            "locate",
-        ],
-
-        "write_file": [
             "write",
-            "create",
-            "save",
-        ],
-
-        "edit_file": [
             "edit",
-            "modify",
-            "update",
+            "search",
+            "find",
         ],
 
+        "docker": [
+            "docker",
+            "container",
+            "containers",
+            "image",
+            "images",
+            "volume",
+            "network",
+            "compose",
+            "logs",
+            "restart",
+            "start",
+            "stop",
+        ],
+
+        "github": [
+            "github",
+            "repository",
+            "repo",
+            "branch",
+            "commit",
+            "pull request",
+            "issue",
+            "workflow",
+            "actions",
+        ],
+
+        "kubernetes": [
+            "kubernetes",
+            "k8s",
+            "pod",
+            "pods",
+            "deployment",
+            "service",
+            "namespace",
+            "cluster",
+            "ingress",
+        ],
+
+        "postgres": [
+            "database",
+            "postgres",
+            "postgresql",
+            "sql",
+            "table",
+            "query",
+        ],
+
+        "aws": [
+            "aws",
+            "ec2",
+            "s3",
+            "lambda",
+            "cloudwatch",
+            "iam",
+            "vpc",
+        ],
+
+        "prometheus": [
+            "metrics",
+            "prometheus",
+            "monitor",
+            "alerts",
+        ],
+
+        "grafana": [
+            "grafana",
+            "dashboard",
+            "visualization",
+            "panel",
+        ],
     }
 
     @classmethod
@@ -58,34 +101,24 @@ class ToolRanker:
 
         message = message.lower()
 
-        scores = []
+        scored = []
 
         for tool in tools:
 
+            server = tool["server"]
+
             score = 0
 
-            for keyword in cls.KEYWORDS.get(tool["name"], []):
+            for keyword in cls.SERVER_KEYWORDS.get(server, []):
 
                 if keyword in message:
-
                     score += 1
 
-            scores.append(
-                (
-                    score,
-                    tool,
-                )
-            )
+            scored.append((score, tool))
 
-        scores.sort(
-            reverse=True,
+        scored.sort(
             key=lambda x: x[0],
+            reverse=True,
         )
 
-        return [
-
-            tool
-
-            for _, tool in scores
-
-        ]
+        return [tool for _, tool in scored]

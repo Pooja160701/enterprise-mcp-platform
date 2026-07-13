@@ -1,13 +1,21 @@
+import json
+
+
 class ResultAggregator:
     """
-    Converts MCP execution results into a single
-    text block for the LLM.
+    Aggregates MCP execution results.
+
+    Produces:
+      - structured data for memory/UI
+      - prompt text for the LLM
     """
 
     @staticmethod
-    def aggregate(results: list) -> str:
+    def aggregate(results: list) -> dict:
 
         sections = []
+
+        prompt_parts = []
 
         for item in results:
 
@@ -15,40 +23,61 @@ class ResultAggregator:
             tool = item["tool"]
             result = item["result"]
 
-            text = ""
-
             #
-            # MCP Response
+            # MCP Content Blocks
             #
             if hasattr(result, "content") and result.content:
 
-                blocks = []
-
-                for block in result.content:
-
-                    if hasattr(block, "text"):
-
-                        blocks.append(block.text)
-
-                text = "\n".join(blocks)
+                text = "\n".join(
+                    block.text
+                    for block in result.content
+                    if hasattr(block, "text")
+                )
 
             #
-            # Plain Python response
+            # dict / list
+            #
+            elif isinstance(result, (dict, list)):
+
+                text = json.dumps(
+                    result,
+                    indent=2,
+                )
+
+            #
+            # everything else
             #
             else:
 
                 text = str(result)
 
             sections.append(
-                "\n".join(
-                    [
-                        "=" * 60,
-                        f"SERVER : {server}",
-                        f"TOOL   : {tool}",
-                        "=" * 60,
-                        text.strip(),
-                    ]
-                )
+                {
+                    "server": server,
+                    "tool": tool,
+                    "text": text,
+                }
             )
 
-        return "\n\n".join(sections)
+            prompt_parts.append(
+                f"""=== {server} :: {tool} ===
+
+{text}
+"""
+            )
+
+        return {
+
+            "sections": sections,
+
+            "prompt": "\n".join(prompt_parts),
+
+        }
+
+    @staticmethod
+    def to_prompt(results: list) -> str:
+        """
+        Backward compatibility.
+        """
+
+        return ResultAggregator.aggregate(results)["prompt"]

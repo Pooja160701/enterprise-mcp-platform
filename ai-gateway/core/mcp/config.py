@@ -43,10 +43,10 @@ MCP_SERVERS = {
 
     "kubernetes": MCPServerConfig(
         name="kubernetes",
-        type="python",
+        type="external",
         command="python",
         args=[
-            "../mcp-servers/kubernetes/server.py",
+            "/mcp-servers/kubernetes/server.py",
         ],
     ),
 

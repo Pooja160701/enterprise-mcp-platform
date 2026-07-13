@@ -24,6 +24,7 @@ services:
       - ./ai-gateway:/app
       - ./mcp-servers:/mcp-servers
       - /var/run/docker.sock:/var/run/docker.sock
+      - ${USERPROFILE}/.kube:/root/.kube:ro
 
     restart: unless-stopped
 

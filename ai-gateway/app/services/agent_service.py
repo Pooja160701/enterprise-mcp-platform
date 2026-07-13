@@ -208,17 +208,9 @@ class AgentService:
         # ---------------------------------------------------
         #
 
-        aggregated = ResultAggregator.aggregate(
+        aggregated = ResultAggregator.aggregate(results)
 
-            results
-
-        )
-
-        tool_text = ResultAggregator.to_prompt(
-
-            aggregated
-
-        )
+        tool_text = aggregated["prompt"]
 
         #
         # ---------------------------------------------------

@@ -36,7 +36,7 @@ Description:
         prompt = f"""
 You are an Enterprise AI Agent.
 
-Your task is to choose exactly ONE tool to satisfy the user's request.
+Your task is to choose one or more tools to satisfy the user's request.
 
 User Request:
 
@@ -52,29 +52,40 @@ Available Tools
 Rules
 ----------------------------------------------------
 
-1. Select exactly ONE server.
+1. Select one or more servers.
 
-2. Select exactly ONE tool.
+2. Select one or more tools.
 
-3. Return ONLY valid JSON.
+3. If one tool is enough, return a JSON object.
 
-4. Do not explain your reasoning.
+4. If multiple tools are needed, return a JSON array.
 
-5. Do not use markdown.
+5. Return ONLY valid JSON.
 
-6. If no arguments are required, return an empty object.
+6. Do not explain your reasoning.
+
+7. Do not use markdown.
+
+8. If no arguments are required, return an empty object.
 
 ----------------------------------------------------
 Example
 ----------------------------------------------------
 
-{{
-  "server": "filesystem",
-  "tool": "list_directory",
-  "arguments": {{
-    "path": "/app/docs"
-  }}
-}}
+    [
+        {{
+            "server":"github",
+            "tool":"repository_info",
+            "arguments":{{
+                "repository":"Pooja160701/enterprise-mcp-platform"
+            }}
+        }},
+        {{
+            "server":"docker",
+            "tool":"list_running_containers",
+            "arguments":{{}}
+        }}
+    ]
 
 ----------------------------------------------------
 Response

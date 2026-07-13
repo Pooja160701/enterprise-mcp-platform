@@ -19,7 +19,7 @@ MCP_SERVERS = {
         args=[
             "-y",
             "@modelcontextprotocol/server-filesystem",
-            "/app/docs",
+            "/app",
         ],
     ),
 

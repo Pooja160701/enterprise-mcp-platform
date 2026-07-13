@@ -2,164 +2,254 @@ import json
 
 from app.services.argument_resolver import ArgumentResolver
 from app.services.conversation_service import ConversationService
+from app.services.execution_service import ExecutionService
+from app.services.intent_service import IntentService
 from app.services.openai_service import OpenAIService
+from app.services.planner_service import PlannerService
+from app.services.result_aggregator import ResultAggregator
 from app.services.telemetry_service import TelemetryService
-from app.services.tool_router import ToolRouter
 from app.services.tool_selector import ToolSelector
+from app.services.memory_service import MemoryService
 from core.mcp.manager import MCPManager
 
 
 class AgentService:
 
     def __init__(self):
-        self.openai = OpenAIService()
-        self.mcp = MCPManager()
-        self.router = ToolRouter()
 
-    async def chat(self, message: str):
+        self.openai = OpenAIService()
+
+        self.mcp = MCPManager()
+
+        self.planner = PlannerService()
+
+        self.executor = ExecutionService()
+
+    async def chat(
+        self,
+        message: str,
+    ):
 
         conversation = ConversationService.create()
 
+        conversation_id = conversation["id"]
+
         telemetry = TelemetryService()
+
         telemetry.begin()
 
         #
-        # -------------------------------
-        # TOOL SELECTION
-        # -------------------------------
+        # ---------------------------------------------------
+        # Detect intent
+        # ---------------------------------------------------
+        #
+
+        intent = IntentService.detect(message)
+
+        servers = []
+
+        for server in self.mcp.registry.names():
+
+            try:
+                await self.mcp.list_tools(server)
+                servers.append(server)
+
+            except Exception:
+                continue
+
+        #
+        # ---------------------------------------------------
+        # Discover Tools
+        # ---------------------------------------------------
         #
 
         telemetry.start_step("tool_selection")
 
         all_tools = []
 
-        #
-        # Filesystem Tools
-        #
-        filesystem_tools = await self.mcp.list_tools("filesystem")
+        for server in servers:
 
-        for tool in filesystem_tools:
-            all_tools.append(
-                {
-                    "server": "filesystem",
-                    "name": tool.name,
-                    "description": tool.description or "",
-                }
-            )
+            try:
+
+                tools = await self.mcp.list_tools(server)
+
+                for tool in tools:
+
+                    all_tools.append(
+
+                        {
+
+                            "server": server,
+
+                            "name": tool.name,
+
+                            "description": tool.description or "",
+
+                        }
+
+                    )
+
+            except Exception as e:
+
+                print(f"Unable to load {server}: {e}")
 
         #
-        # Docker Tools
+        # Rank tools
         #
-        docker_tools = await self.mcp.list_tools("docker")
-
-        for tool in docker_tools:
-            all_tools.append(
-                {
-                    "server": "docker",
-                    "name": tool.name,
-                    "description": tool.description or "",
-                }
-            )
 
         candidate_tools = ToolSelector.select(
+
             message,
+
             all_tools,
+
         )
 
-        print("\nAvailable tools sent to GPT:\n")
+        print("\nCandidate Tools\n")
 
         for tool in candidate_tools:
+
             print(
-                tool["server"],
-                "->",
-                tool["name"],
+
+                f"{tool['server']} -> {tool['name']}"
+
             )
 
-        decision = await self.openai.choose_tool(
+        #
+        # ---------------------------------------------------
+        # Planner
+        # ---------------------------------------------------
+        #
+
+        plan = await self.planner.create_plan(
+
             message,
+
             candidate_tools,
+
         )
 
-        print("\nGPT Decision:\n")
-        print(decision)
+        print("\nExecution Plan\n")
+
+        print(
+
+            json.dumps(
+
+                plan,
+
+                indent=2,
+
+            )
+
+        )
 
         telemetry.end_step("tool_selection")
 
         #
-        # -------------------------------
-        # PARSE LLM RESPONSE
-        # -------------------------------
+        # ---------------------------------------------------
+        # Resolve Arguments
+        # ---------------------------------------------------
         #
 
-        try:
-            plan = json.loads(decision)
+        for step in plan:
 
-        except json.JSONDecodeError:
+            step["arguments"] = ArgumentResolver.resolve(
 
-            raise ValueError(
-                f"Invalid JSON returned by OpenAI:\n\n{decision}"
+                step["tool"],
+
+                step.get(
+
+                    "arguments",
+
+                    {},
+
+                ),
+
             )
 
-        arguments = ArgumentResolver.resolve(
-            plan["tool"],
-            plan.get("arguments", {}),
-        )
-
         #
-        # -------------------------------
-        # EXECUTE TOOL
-        # -------------------------------
+        # ---------------------------------------------------
+        # Execute
+        # ---------------------------------------------------
         #
 
         telemetry.start_step("tool_execution")
 
-        result = await self.router.execute(
-            tool=plan["tool"],
-            arguments=arguments,
-            server=plan["server"],
+        results = await self.executor.execute_plan(
+            plan
+        )
+
+        MemoryService.save(
+            conversation_id,
+            "last_plan",
+            plan,
+        )
+
+        MemoryService.save(
+            conversation_id,
+            "last_results",
+            results,
+        )
+
+        MemoryService.save(
+            conversation_id,
+            "last_message",
+            message,
         )
 
         telemetry.end_step("tool_execution")
 
         #
-        # -------------------------------
-        # FORMAT TOOL OUTPUT
-        # -------------------------------
+        # ---------------------------------------------------
+        # Aggregate Results
+        # ---------------------------------------------------
         #
 
-        tool_text = ""
+        aggregated = ResultAggregator.aggregate(
 
-        if hasattr(result, "content") and result.content:
+            results
 
-            tool_text = "\n".join(
-
-                block.text
-
-                for block in result.content
-
-                if hasattr(block, "text")
-
-            )
-
-        else:
-
-            tool_text = str(result)
-
-        #
-        # -------------------------------
-        # RESPONSE GENERATION
-        # -------------------------------
-        #
-
-        telemetry.start_step("response_generation")
-
-        answer = await self.openai.summarize_result(
-            user_message=message,
-            tool_name=plan["tool"],
-            tool_result=tool_text,
         )
 
-        telemetry.end_step("response_generation")
+        tool_text = ResultAggregator.to_prompt(
+
+            aggregated
+
+        )
+
+        #
+        # ---------------------------------------------------
+        # Generate Final Answer
+        # ---------------------------------------------------
+        #
+
+        telemetry.start_step(
+
+            "response_generation"
+
+        )
+
+        answer = await self.openai.summarize_result(
+
+            user_message=message,
+
+            tool_name=", ".join(
+
+                step["tool"]
+
+                for step in plan
+
+            ),
+
+            tool_result=tool_text,
+
+        )
+
+        telemetry.end_step(
+
+            "response_generation"
+
+        )
 
         execution = telemetry.finish()
 
@@ -175,9 +265,21 @@ class AgentService:
 
                 "duration_ms": execution["total"],
 
-                "server": plan["server"],
+                "server": ", ".join(
 
-                "tool": plan["tool"],
+                    step["server"]
+
+                    for step in plan
+
+                ),
+
+                "tool": ", ".join(
+
+                    step["tool"]
+
+                    for step in plan
+
+                ),
 
                 "started_at": execution["started_at"],
 
@@ -188,28 +290,47 @@ class AgentService:
             "steps": [
 
                 {
+
                     "id": 1,
-                    "title": "Tool Selection",
-                    "description": "AI selected the appropriate MCP server and tool.",
+
+                    "title": "Intent Detection & Planning",
+
+                    "description": f"Detected '{intent}' intent and planned {len(plan)} tool(s).",
+
                     "status": "completed",
+
                     "duration_ms": execution["steps"]["tool_selection"],
+
                 },
 
                 {
+
                     "id": 2,
+
                     "title": "Tool Execution",
-                    "description": f'Executed "{plan["tool"]}" on {plan["server"]}.',
+
+                    "description": f"Executed {len(plan)} MCP tool(s).",
+
                     "status": "completed",
+
                     "duration_ms": execution["steps"]["tool_execution"],
+
                 },
 
                 {
+
                     "id": 3,
+
                     "title": "Response Generation",
-                    "description": "Generated the final response.",
+
+                    "description": "Generated the final AI response.",
+
                     "status": "completed",
+
                     "duration_ms": execution["steps"]["response_generation"],
+
                 },
 
             ],
+
         }

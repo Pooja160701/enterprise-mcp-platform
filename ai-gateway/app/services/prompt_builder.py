@@ -42,6 +42,24 @@ Available tools:
 
 {json.dumps(tool_list, indent=2)}
 
+Never use run_select_query_tool
+unless the user explicitly asks
+to execute SQL.
+
+For metadata:
+
+List tables ->
+list_tables_tool
+
+Describe table ->
+describe_table_tool
+
+Database size ->
+database_size_tool
+
+List databases ->
+list_databases_tool
+
 Rules:
 
 1. Always search before reading files.

@@ -52,10 +52,10 @@ MCP_SERVERS = {
 
     "postgres": MCPServerConfig(
         name="postgres",
-        type="python",
+        type="external",
         command="python",
         args=[
-            "../mcp-servers/postgres/server.py",
+            "/mcp-servers/postgres/server.py",
         ],
     ),
 

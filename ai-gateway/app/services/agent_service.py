@@ -1,10 +1,13 @@
 import json
 
+from core.mcp.manager import MCPManager
+
 from app.services.argument_resolver import ArgumentResolver
-from app.services.context_service import ContextService
+from app.services.context_extractor import ContextExtractor
+from app.services.context_store import ContextStore
 from app.services.conversation_service import ConversationService
 from app.services.execution_service import ExecutionService
-from app.services.intent_service import IntentService
+from app.services.intent_classifier import IntentClassifier
 from app.services.memory_service import MemoryService
 from app.services.openai_service import OpenAIService
 from app.services.planner_service import PlannerService
@@ -12,10 +15,33 @@ from app.services.result_aggregator import ResultAggregator
 from app.services.telemetry_service import TelemetryService
 from app.services.tool_selector import ToolSelector
 
-from core.mcp.manager import MCPManager
-
 
 class AgentService:
+    """
+    Enterprise AI Agent
+
+    Pipeline
+
+    User
+        ↓
+    Intent Detection
+        ↓
+    Tool Discovery
+        ↓
+    Tool Ranking
+        ↓
+    Planner (if required)
+        ↓
+    Argument Resolution
+        ↓
+    Tool Execution
+        ↓
+    Context Update
+        ↓
+    Result Aggregation
+        ↓
+    OpenAI Response
+    """
 
     def __init__(self):
 
@@ -27,40 +53,75 @@ class AgentService:
 
         self.executor = ExecutionService()
 
-        self.intent = IntentService()
+        self.intent_classifier = IntentClassifier()
+
+        self.context_store = ContextStore()
+
+        self.context_extractor = ContextExtractor()
 
     async def chat(
         self,
         message: str,
     ):
 
+        #
+        # ---------------------------------------------
+        # Conversation
+        # ---------------------------------------------
+        #
+
         conversation = ConversationService.create()
 
         conversation_id = conversation["id"]
+
+        #
+        # ---------------------------------------------
+        # Telemetry
+        # ---------------------------------------------
+        #
 
         telemetry = TelemetryService()
 
         telemetry.begin()
 
         #
-        # ---------------------------------------------------
-        # Detect intent
-        # ---------------------------------------------------
+        # ---------------------------------------------
+        # Conversation Context
+        # ---------------------------------------------
         #
 
-        intent = await self.intent.detect(message)
+        ContextStore.update(
+            conversation_id,
+            **ContextExtractor.extract(message),
+        )
+
+        memory = ContextStore.get(conversation_id)
+
+        print("\nConversation Context\n")
+        print(json.dumps(memory, indent=2))
 
         #
-        # ---------------------------------------------------
-        # Discover Tools
-        # ---------------------------------------------------
+        # ---------------------------------------------
+        # Tool Discovery
+        # ---------------------------------------------
         #
 
         telemetry.start_step("tool_selection")
 
         all_tools = []
 
-        for server in intent:
+        servers = [
+            "filesystem",
+            "docker",
+            "github",
+            "kubernetes",
+            "postgres",
+            "prometheus",
+            "grafana",
+            "aws",
+        ]
+
+        for server in servers:
 
             try:
 
@@ -69,33 +130,37 @@ class AgentService:
                 for tool in tools:
 
                     all_tools.append(
-
                         {
-
                             "server": server,
-
                             "name": tool.name,
-
                             "description": tool.description or "",
-
                         }
-
                     )
 
-            except Exception as e:
+            except Exception:
 
-                print(f"Unable to load {server}: {e}")
+                #
+                # Ignore offline servers
+                #
+                pass
+
+        print("\nDiscovered Tools\n")
+
+        for tool in all_tools:
+
+            print(
+                f'{tool["server"]} -> {tool["name"]}'
+            )
 
         #
-        # Rank tools
+        # ---------------------------------------------
+        # Rank candidate tools
+        # ---------------------------------------------
         #
 
         candidate_tools = ToolSelector.select(
-
             message,
-
             all_tools,
-
         )
 
         print("\nCandidate Tools\n")
@@ -103,45 +168,53 @@ class AgentService:
         for tool in candidate_tools:
 
             print(
-
-                f"{tool['server']} -> {tool['name']}"
-
+                f'{tool["server"]} -> {tool["name"]}'
             )
 
         #
-        # ---------------------------------------------------
-        # Planner
-        # ---------------------------------------------------
+        # ------------------------------------------------
+        # Fast Intent Detection
+        # ------------------------------------------------
         #
 
-        plan = await self.planner.create_plan(
+        intent = self.intent_classifier.classify(message)
 
-            message,
+        if intent:
 
-            candidate_tools,
+            print("\nIntent Match\n")
+            print(json.dumps(intent, indent=2))
 
-        )
+            plan = [
+                {
+                    "id": 1,
+                    **intent,
+                }
+            ]
+
+        else:
+
+            print("\nUsing Planner...\n")
+
+            plan = await self.planner.create_plan(
+                message=message,
+                tools=candidate_tools,
+            )
 
         print("\nExecution Plan\n")
 
         print(
-
             json.dumps(
-
                 plan,
-
                 indent=2,
-
             )
-
         )
 
         telemetry.end_step("tool_selection")
 
         #
-        # ---------------------------------------------------
+        # ------------------------------------------------
         # Resolve Arguments
-        # ---------------------------------------------------
+        # ------------------------------------------------
         #
 
         for step in plan:
@@ -151,100 +224,105 @@ class AgentService:
                 step["tool"],
 
                 step.get(
-
                     "arguments",
-
                     {},
-
                 ),
-
             )
 
+        print("\nResolved Plan\n")
+
+        print(
+            json.dumps(
+                plan,
+                indent=2,
+            )
+        )
+
         #
-        # ---------------------------------------------------
-        # Execute
-        # ---------------------------------------------------
+        # ------------------------------------------------
+        # Execute Plan
+        # ------------------------------------------------
         #
 
         telemetry.start_step("tool_execution")
 
-        results = await self.executor.execute_plan(
-            plan
-        )
-
-        memory = MemoryService.get_all(conversation_id)
-
-        for step, item in zip(plan, results):
-
-            ContextService.update(
-                memory,
-                step,
-                item["output"],
-            )
-
-            MemoryService.save(
-                conversation_id,
-                "last_plan",
-                plan,
-            )
-
-            MemoryService.save(
-                conversation_id,
-                "last_results",
-                results,
-            )
-
-            MemoryService.save(
-                conversation_id,
-                "last_message",
-                message,
-            )
+        results = await self.executor.execute_plan(plan)
 
         telemetry.end_step("tool_execution")
 
+        print("\nExecution Results\n")
+
+        print(
+            json.dumps(
+                results,
+                indent=2,
+                default=str,
+            )
+        )
+
         #
-        # ---------------------------------------------------
-        # Aggregate Results
-        # ---------------------------------------------------
+        # ------------------------------------------------
+        # Update Context
+        # ------------------------------------------------
+        #
+
+        for step, result in zip(plan, results):
+
+            ContextStore.update(
+                conversation_id,
+                last_server=step["server"],
+                last_tool=step["tool"],
+            )
+
+        MemoryService.save(
+            conversation_id,
+            "last_message",
+            message,
+        )
+
+        MemoryService.save(
+            conversation_id,
+            "last_plan",
+            plan,
+        )
+
+        MemoryService.save(
+            conversation_id,
+            "last_results",
+            results,
+        )
+
+        #
+        # ------------------------------------------------
+        # Aggregate Tool Results
+        # ------------------------------------------------
         #
 
         aggregated = ResultAggregator.aggregate(results)
 
         tool_text = aggregated["prompt"]
 
+        print("\nAggregated Prompt\n")
+
+        print(tool_text)
+
         #
-        # ---------------------------------------------------
-        # Generate Final Answer
-        # ---------------------------------------------------
+        # ------------------------------------------------
+        # Generate Response
+        # ------------------------------------------------
         #
 
-        telemetry.start_step(
-
-            "response_generation"
-
-        )
+        telemetry.start_step("response_generation")
 
         answer = await self.openai.summarize_result(
-
             user_message=message,
-
             tool_name=", ".join(
-
-                step["tool"]
-
-                for step in plan
-
+                step["tool"] for step in plan
             ),
-
             tool_result=tool_text,
-
         )
 
-        telemetry.end_step(
-
-            "response_generation"
-
-        )
+        telemetry.end_step("response_generation")
 
         execution = telemetry.finish()
 
@@ -261,19 +339,11 @@ class AgentService:
                 "duration_ms": execution["total"],
 
                 "server": ", ".join(
-
-                    step["server"]
-
-                    for step in plan
-
+                    step["server"] for step in plan
                 ),
 
                 "tool": ", ".join(
-
-                    step["tool"]
-
-                    for step in plan
-
+                    step["tool"] for step in plan
                 ),
 
                 "started_at": execution["started_at"],
@@ -288,9 +358,9 @@ class AgentService:
 
                     "id": 1,
 
-                    "title": "Intent Detection & Planning",
+                    "title": "Planning",
 
-                    "description": f"Detected '{intent}' intent and planned {len(plan)} tool(s).",
+                    "description": f"Planned {len(plan)} step(s).",
 
                     "status": "completed",
 
@@ -302,9 +372,9 @@ class AgentService:
 
                     "id": 2,
 
-                    "title": "Tool Execution",
+                    "title": "Execution",
 
-                    "description": f"Executed {len(plan)} MCP tool(s).",
+                    "description": f"Executed {len(results)} tool(s).",
 
                     "status": "completed",
 
@@ -316,9 +386,9 @@ class AgentService:
 
                     "id": 3,
 
-                    "title": "Response Generation",
+                    "title": "Response",
 
-                    "description": "Generated the final AI response.",
+                    "description": "Generated final AI response.",
 
                     "status": "completed",
 

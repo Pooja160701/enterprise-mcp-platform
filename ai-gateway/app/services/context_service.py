@@ -1,69 +1,51 @@
-class ContextService:
+class ContextStore:
     """
-    Extracts reusable context from tool execution results.
+    Stores conversation context.
+
+    Example:
+
+    conversation_id ->
+    {
+        "repository": "...",
+        "database": "...",
+        "schema": "...",
+        "directory": "...",
+        "file": "...",
+        "namespace": "..."
+    }
     """
 
-    @staticmethod
-    def update(memory, step, result):
+    _store = {}
 
-        tool = step["tool"]
+    @classmethod
+    def get(cls, conversation):
 
-        #
-        # GitHub
-        #
+        return cls._store.setdefault(
+            conversation,
+            {}
+        )
 
-        if tool == "list_repositories":
+    @classmethod
+    def update(
+        cls,
+        conversation,
+        **kwargs,
+    ):
 
-            if isinstance(result, list) and result:
+        memory = cls.get(conversation)
 
-                memory["repository"] = result[0]["full_name"]
+        for key, value in kwargs.items():
 
-        #
-        # Filesystem
-        #
+            if value is not None:
+                memory[key] = value
 
-        elif tool == "search_files":
+    @classmethod
+    def clear(
+        cls,
+        conversation,
+    ):
 
-            if isinstance(result, dict):
-
-                first = result.get("first_match")
-
-                if first:
-
-                    memory["last_file"] = first
-
-        elif tool == "read_text_file":
-
-            path = step["arguments"].get("path")
-
-            if path:
-
-                memory["last_file"] = path
-
-        #
-        # Docker
-        #
-
-        elif tool == "list_running_containers":
-
-            if isinstance(result, list) and result:
-
-                memory["container"] = result[0]["name"]
-
-        elif tool in {
-
-            "start_container",
-
-            "stop_container",
-
-            "container_logs",
-
-        }:
-
-            name = step["arguments"].get("name")
-
-            if name:
-
-                memory["container"] = name
-
-        return memory
+        cls._store.pop(
+            conversation,
+            None,
+        )

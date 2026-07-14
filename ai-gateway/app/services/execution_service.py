@@ -1,6 +1,6 @@
 from app.services.tool_router import ToolRouter
-from app.services.variable_resolver import VariableResolver
-
+from app.services.dependency_executor import DependencyExecutor
+import json
 
 class ExecutionService:
 
@@ -16,39 +16,30 @@ class ExecutionService:
 
         for step in plan:
 
-            #
-            # Resolve variables using previous results
-            #
-            resolved_plan = VariableResolver.resolve(
+            resolved = DependencyExecutor.resolve(
                 [step],
-                [
-                    item["output"]
-                    for item in results
-                ],
-            )
-
-            resolved_step = resolved_plan[0]
+                results,
+            )[0]
 
             response = await self.router.execute(
-                server=resolved_step["server"],
-                tool=resolved_step["tool"],
-                arguments=resolved_step["arguments"],
+                server=resolved["server"],
+                tool=resolved["tool"],
+                arguments=resolved["arguments"],
             )
 
-            #
-            # Convert MCP response into something reusable
-            #
             output = self.extract_output(response)
 
             results.append(
                 {
-                    "server": resolved_step["server"],
-                    "tool": resolved_step["tool"],
-                    "arguments": resolved_step["arguments"],
-                    "result": response,
-                    "output": output,
+                    "server": resolved["server"],
+                    "tool": resolved["tool"],
+                    "result": output,
                 }
             )
+
+        print("\nExecution Results\n")
+        from pprint import pprint
+        pprint(results)
 
         return results
 
@@ -56,46 +47,54 @@ class ExecutionService:
         self,
         response,
     ):
+        """
+        Convert MCP response into native Python objects.
+        """
 
         #
-        # MCP normally returns content blocks.
+        # FastMCP returns content blocks.
         #
 
         if hasattr(response, "content"):
 
+            values = []
+
             for block in response.content:
 
                 #
-                # Text
+                # Structured JSON
+                #
+
+                if hasattr(block, "data"):
+
+                    values.append(block.data)
+                    continue
+
+                #
+                # Older MCP versions
+                #
+
+                if hasattr(block, "json"):
+
+                    values.append(block.json)
+                    continue
+
+                #
+                # Text response
                 #
 
                 if hasattr(block, "text"):
 
-                    return {
-                        "text": block.text,
-                        "first_match": block.text,
-                    }
+                    values.append(block.text)
+                    continue
+
+            if len(values) == 1:
+                return values[0]
+
+            return values
 
         #
-        # Dict
+        # Already decoded
         #
 
-        if isinstance(response, dict):
-
-            return response
-
-        #
-        # List
-        #
-
-        if isinstance(response, list):
-
-            if response:
-
-                return {
-                    "first_match": response[0]
-                }
-
-        return {
-            "value": str(response)
-        }
+        return response

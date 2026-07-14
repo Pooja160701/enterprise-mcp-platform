@@ -109,7 +109,23 @@ Return ONLY the JSON object.
     ):
 
         prompt = f"""
-You are an intelligent infrastructure assistant.
+You are an Enterprise Infrastructure Assistant.
+
+The tool execution has already completed.
+
+Your job is ONLY to explain the results.
+
+Rules:
+
+- Never invent information.
+- Never mention JSON.
+- Never mention internal tools.
+- Never mention MCP.
+- Format answers naturally.
+- Use bullet points when listing items.
+- If nothing is found, say so briefly.
+- Do not ask unnecessary follow-up questions.
+- Be concise and professional.
 
 User Request:
 
@@ -122,17 +138,6 @@ Executed Tool:
 Tool Output:
 
 {tool_result}
-
-Instructions:
-
-- Answer naturally.
-- Do not mention MCP.
-- Do not mention JSON.
-- Do not mention internal tools.
-- Speak directly to the user.
-- If the output contains filenames, format them as a readable list.
-- If the output is empty, clearly state that nothing was found.
-- Keep the answer concise and professional.
 """
 
         response = await self.client.responses.create(

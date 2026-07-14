@@ -61,10 +61,10 @@ MCP_SERVERS = {
 
     "prometheus": MCPServerConfig(
         name="prometheus",
-        type="python",
+        type="external",
         command="python",
         args=[
-            "../mcp-servers/prometheus/server.py",
+            "/mcp-servers/prometheus/server.py",
         ],
     ),
 

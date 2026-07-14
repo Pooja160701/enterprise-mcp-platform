@@ -16,3 +16,5 @@ docker>=7.0.0
 PyGithub
 kubernetes
 psycopg[binary]==3.2.9
+boto3
+botocore

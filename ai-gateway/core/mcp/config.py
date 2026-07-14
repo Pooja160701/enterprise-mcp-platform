@@ -79,10 +79,10 @@ MCP_SERVERS = {
 
     "aws": MCPServerConfig(
         name="aws",
-        type="python",
+        type="external",
         command="python",
         args=[
-            "../mcp-servers/aws/server.py",
+            "/mcp-servers/aws/server.py",
         ],
     ),
 }

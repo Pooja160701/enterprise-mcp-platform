@@ -70,10 +70,10 @@ MCP_SERVERS = {
 
     "grafana": MCPServerConfig(
         name="grafana",
-        type="python",
+        type="external",
         command="python",
         args=[
-            "../mcp-servers/grafana/server.py",
+            "/mcp-servers/grafana/server.py",
         ],
     ),
 

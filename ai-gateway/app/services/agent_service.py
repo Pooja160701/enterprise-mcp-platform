@@ -14,6 +14,7 @@ from app.services.planner_service import PlannerService
 from app.services.result_aggregator import ResultAggregator
 from app.services.telemetry_service import TelemetryService
 from app.services.tool_selector import ToolSelector
+from app.memory.memory_manager import MemoryManager
 
 
 class AgentService:
@@ -73,6 +74,43 @@ class AgentService:
         conversation = ConversationService.create()
 
         conversation_id = conversation["id"]
+
+        #
+        # ---------------------------------------------
+        # Memory
+        # ---------------------------------------------
+        #
+
+        user_id = "default"
+
+        MemoryManager.add_message(
+            conversation_id=conversation_id,
+            role="user",
+            content=message,
+        )
+
+        MemoryManager.set_session(
+            conversation_id,
+            "last_user_message",
+            message,
+        )
+
+        relevant_memory = MemoryManager.search(
+            query=message,
+            conversation_id=conversation_id,
+            user_id=user_id,
+            top_k=5,
+        )
+
+        print("\nRelevant Memory\n")
+
+        print(
+            json.dumps(
+                relevant_memory,
+                indent=2,
+                default=str,
+            )
+        )
 
         #
         # ---------------------------------------------
@@ -166,6 +204,20 @@ class AgentService:
         for tool in candidate_tools:
 
             print(f'{tool["server"]} -> {tool["name"]}')
+
+        #
+        # ---------------------------------------------
+        # Memory Summary
+        # ---------------------------------------------
+        #
+
+        memory_summary = MemoryManager.brief_summary(
+            conversation_id,
+        )
+
+        print("\nConversation Summary\n")
+
+        print(memory_summary)
 
         #
         # ------------------------------------------------
@@ -319,6 +371,29 @@ class AgentService:
         )
 
         #
+        # ---------------------------------------------
+        # Save Tool Results
+        # ---------------------------------------------
+        #
+
+        MemoryManager.set_session(
+            conversation_id,
+            "last_results",
+            results,
+        )
+
+        MemoryManager.add_semantic(
+            text=tool_text if "tool_text" in locals() else str(results),
+            metadata={
+                "conversation": conversation_id,
+            },
+            tags=[
+                "execution",
+                "tool_result",
+            ],
+        )
+
+        #
         # ------------------------------------------------
         # Update Context
         # ------------------------------------------------
@@ -378,6 +453,31 @@ class AgentService:
             tool_result=tool_text,
         )
 
+        #
+        # ---------------------------------------------
+        # Store Assistant Response
+        # ---------------------------------------------
+        #
+
+        MemoryManager.add_message(
+            conversation_id=conversation_id,
+            role="assistant",
+            content=answer,
+        )
+
+        MemoryManager.set_session(
+            conversation_id,
+            "last_answer",
+            answer,
+        )
+
+        MemoryManager.remember(
+            user_id=user_id,
+            content=message,
+            category="conversation",
+            importance=60,
+        )
+
         telemetry.end_step("response_generation")
 
         execution = telemetry.finish()
@@ -385,6 +485,15 @@ class AgentService:
         return {
             "conversation": conversation,
             "answer": answer,
+            "memory": {
+                "summary": MemoryManager.summary(
+                    conversation_id,
+                ),
+                "statistics": MemoryManager.stats(
+                    conversation_id=conversation_id,
+                    user_id=user_id,
+                ),
+            },
             "planner": {
                 "confidence": planner_result["confidence"],
                 "validation": planner_result["validation"],

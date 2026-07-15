@@ -1,13 +1,19 @@
-import asyncio
+import json
+
+from app.planner.circuit_breaker import CircuitBreaker
+from app.planner.dependency_executor import DependencyExecutor
+from app.planner.result_cache import ResultCache
+from app.planner.retry_engine import RetryEngine
+from app.planner.timeout_manager import TimeoutManager
+from app.planner.streaming_executor import StreamingExecutor
 
 from app.services.tool_router import ToolRouter
-from app.services.dependency_executor import DependencyExecutor
-from app.services.argument_resolver import ArgumentResolver
 
 
 class ExecutionService:
 
     def __init__(self):
+
         self.router = ToolRouter()
 
     async def execute_plan(
@@ -15,80 +21,206 @@ class ExecutionService:
         plan,
     ):
 
-        execution_levels = DependencyExecutor.build(plan)
+        stream = StreamingExecutor()
 
-        print("\nExecution Levels\n")
-        print(execution_levels)
+        results = await stream.execute(
+            plan=plan,
+            executor=self,
+        )
 
-        results = []
+        print("\nExecution Stream\n")
 
-        for level in execution_levels:
-
-            #
-            # Resolve arguments using outputs
-            # from previous execution levels.
-            #
-
-            resolved_level = []
-
-            for step in level:
-
-                resolved_step = step.copy()
-
-                resolved_step["arguments"] = ArgumentResolver.resolve(
-                    step.get(
-                        "arguments",
-                        {},
-                    ),
-                    results,
-                )
-
-                resolved_level.append(
-                    resolved_step
-                )
-
-            print("\nExecuting Level\n")
-            print(resolved_level)
-
-            tasks = [
-                self.execute_step(step)
-                for step in resolved_level
-            ]
-
-            level_results = await asyncio.gather(
-                *tasks,
-                return_exceptions=False,
+        print(
+            json.dumps(
+                stream.history(),
+                indent=2,
+                default=str,
             )
-
-            results.extend(level_results)
+        )
 
         print("\nExecution Results\n")
-        print(results)
+
+        print(
+            json.dumps(
+                results,
+                indent=2,
+                default=str,
+            )
+        )
+
+        print("\nCache Statistics\n")
+
+        print(
+            json.dumps(
+                ResultCache.stats(),
+                indent=2,
+            )
+        )
+
+        print("\nCircuit Breakers\n")
+
+        print(
+            json.dumps(
+                CircuitBreaker.all_stats(),
+                indent=2,
+                default=str,
+            )
+        )
 
         return results
 
     async def execute_step(
         self,
         step,
+        previous_results,
     ):
+        """
+        Execution Pipeline
 
-        response = await self.router.execute(
-            server=step["server"],
-            tool=step["tool"],
-            arguments=step.get(
+            Resolve Arguments
+                    ↓
+               Cache Lookup
+                    ↓
+             Circuit Breaker
+                    ↓
+              Timeout Manager
+                    ↓
+                Retry Engine
+                    ↓
+              Execute MCP Tool
+                    ↓
+              Store In Cache
+                    ↓
+                 Return Result
+        """
+
+        #
+        # Resolve placeholders
+        #
+
+        arguments = DependencyExecutor.resolve_arguments(
+            step.get(
                 "arguments",
                 {},
             ),
+            previous_results,
         )
 
-        output = self.extract_output(response)
+        #
+        # Cache lookup
+        #
 
-        return {
-            "id": step["id"],
-            "server": step["server"],
-            "tool": step["tool"],
-            "result": output,
-        }
+        cached = ResultCache.get(
+            server=step["server"],
+            tool=step["tool"],
+            arguments=arguments,
+        )
+
+        if cached is not None:
+
+            print(
+                f"[CACHE HIT] {step['server']} -> {step['tool']}"
+            )
+
+            return {
+
+                "id": step["id"],
+
+                "server": step["server"],
+
+                "tool": step["tool"],
+
+                "result": cached,
+
+                "cached": True,
+
+            }
+
+        print(
+            f"[EXECUTE] {step['server']} -> {step['tool']}"
+        )
+
+        try:
+
+            #
+            # Circuit Breaker
+            #
+
+            response = await CircuitBreaker.execute(
+
+                server=step["server"],
+
+                coro=TimeoutManager.execute(
+
+                    RetryEngine.execute(
+
+                        self.router.execute,
+
+                        server=step["server"],
+
+                        tool=step["tool"],
+
+                        arguments=arguments,
+
+                    ),
+
+                    server=step["server"],
+
+                ),
+
+            )
+
+            output = self.extract_output(
+                response
+            )
+
+            #
+            # Store successful result
+            #
+
+            ResultCache.put(
+
+                server=step["server"],
+
+                tool=step["tool"],
+
+                arguments=arguments,
+
+                result=output,
+
+            )
+
+            return {
+
+                "id": step["id"],
+
+                "server": step["server"],
+
+                "tool": step["tool"],
+
+                "result": output,
+
+                "cached": False,
+
+            }
+
+        except Exception as exc:
+
+            return {
+
+                "id": step["id"],
+
+                "server": step["server"],
+
+                "tool": step["tool"],
+
+                "result": str(exc),
+
+                "cached": False,
+
+                "error": True,
+
+            }
 
     def extract_output(
         self,
@@ -96,28 +228,62 @@ class ExecutionService:
     ):
 
         #
-        # MCP Content blocks
+        # MCP Content Blocks
         #
 
-        if hasattr(response, "content"):
+        if hasattr(
+            response,
+            "content",
+        ):
 
             values = []
 
             for block in response.content:
 
-                if hasattr(block, "text"):
+                if hasattr(
+                    block,
+                    "text",
+                ):
 
-                    values.append(block.text)
+                    values.append(
+                        block.text
+                    )
 
             #
-            # Single object
+            # Single Block
             #
 
             if len(values) == 1:
 
-                return values[0]
+                try:
 
-            return values
+                    return json.loads(
+                        values[0]
+                    )
+
+                except Exception:
+
+                    return values[0]
+
+            #
+            # Multiple Blocks
+            #
+
+            parsed = []
+
+            for value in values:
+
+                try:
+
+                    parsed.append(
+                        json.loads(value)
+                    )
+
+                except Exception:
+
+                    parsed.append(value)
+
+            return parsed
 
         #
         # Dictionary
@@ -127,6 +293,7 @@ class ExecutionService:
             response,
             dict,
         ):
+
             return response
 
         #
@@ -137,6 +304,30 @@ class ExecutionService:
             response,
             list,
         ):
+
             return response
+
+        #
+        # JSON String
+        #
+
+        if isinstance(
+            response,
+            str,
+        ):
+
+            try:
+
+                return json.loads(
+                    response
+                )
+
+            except Exception:
+
+                return response
+
+        #
+        # Fallback
+        #
 
         return str(response)

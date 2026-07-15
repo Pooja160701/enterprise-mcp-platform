@@ -175,6 +175,12 @@ class AgentService:
 
         intent = self.intent_classifier.classify(message)
 
+        #
+        # ------------------------------------------------
+        # Rule-based intent
+        # ------------------------------------------------
+        #
+
         if intent:
 
             print("\nIntent Match\n")
@@ -187,14 +193,57 @@ class AgentService:
                 }
             ]
 
+            planner_result = {
+
+                "plan": plan,
+
+                "confidence": {
+
+                    "score": 100,
+
+                    "grade": "A+",
+
+                    "status": "Rule Match",
+
+                },
+
+                "validation": {
+
+                    "valid": True,
+
+                    "errors": [],
+
+                    "warnings": [],
+
+                },
+
+                "repairs": [],
+
+                "optimizations": [],
+
+                "estimated_cost": 0,
+
+            }
+
         else:
 
             print("\nUsing Planner...\n")
 
-        plan = await self.planner.create_plan(
-            user_message=message,
-            candidate_tools=candidate_tools,
-        )
+            planner_result = await self.planner.create_plan(
+
+                user_message=message,
+
+                candidate_tools=candidate_tools,
+
+            )
+
+            plan = planner_result["plan"]
+
+        #
+        # ------------------------------------------------
+        # Planner Diagnostics
+        # ------------------------------------------------
+        #
 
         print("\nPlanner Output\n")
 
@@ -203,6 +252,46 @@ class AgentService:
                 plan,
                 indent=2,
             )
+        )
+
+        print("\nPlanner Confidence\n")
+
+        print(
+            json.dumps(
+                planner_result["confidence"],
+                indent=2,
+            )
+        )
+
+        print("\nPlanner Validation\n")
+
+        print(
+            json.dumps(
+                planner_result["validation"],
+                indent=2,
+            )
+        )
+
+        print("\nPlanner Repairs\n")
+
+        print(
+            json.dumps(
+                planner_result["repairs"],
+                indent=2,
+            )
+        )
+
+        print("\nPlanner Optimizations\n")
+
+        print(
+            json.dumps(
+                planner_result["optimizations"],
+                indent=2,
+            )
+        )
+
+        print(
+            f"\nEstimated Cost: {planner_result['estimated_cost']}"
         )
 
         telemetry.end_step("tool_selection")
@@ -296,6 +385,13 @@ class AgentService:
         return {
             "conversation": conversation,
             "answer": answer,
+            "planner": {
+                "confidence": planner_result["confidence"],
+                "validation": planner_result["validation"],
+                "repairs": planner_result["repairs"],
+                "optimizations": planner_result["optimizations"],
+                "estimated_cost": planner_result["estimated_cost"],
+            },
             "execution": {
                 "status": "success",
                 "duration_ms": execution["total"],

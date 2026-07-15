@@ -34,11 +34,25 @@ class SemanticMemory:
     @classmethod
     def add(
         cls,
-        content,
+        content=None,
+        *,
+        text=None,
         tags=None,
         importance=50,
         metadata=None,
     ):
+
+        #
+        # Allow either "content" or "text"
+        #
+
+        if content is None:
+            content = text
+
+        if content is None:
+            raise ValueError(
+                "Either 'content' or 'text' must be provided."
+            )
 
         tags = tags or []
 

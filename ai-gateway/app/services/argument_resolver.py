@@ -1,58 +1,119 @@
-class ArgumentResolver:
+import re
+import json
 
-    @staticmethod
+
+class ArgumentResolver:
+    """
+    Resolves placeholders inside execution plans.
+
+    Example:
+
+    "$1.name"
+        ↓
+    "enterprise-mcp-platform"
+
+    "$2.id"
+        ↓
+    "i-123456"
+
+    "$3.namespace"
+        ↓
+    "default"
+    """
+
+    PLACEHOLDER = re.compile(
+        r"^\$(\d+)\.(.+)$"
+    )
+
+    @classmethod
     def resolve(
-        tool: str,
-        arguments: dict,
+        cls,
+        arguments,
+        previous_results=None,
     ):
 
-        if arguments is None:
-            arguments = {}
+        if previous_results is None:
+            previous_results = []
+
+        resolved = {}
+
+        for key, value in arguments.items():
+
+            resolved[key] = cls.resolve_value(
+                value,
+                previous_results,
+            )
+
+        return resolved
+
+    @classmethod
+    def resolve_value(
+        cls,
+        value,
+        previous_results,
+    ):
+
+        if not isinstance(value, str):
+            return value
+
+        match = cls.PLACEHOLDER.match(value)
+
+        if not match:
+            return value
+
+        step_id = int(match.group(1))
+        field = match.group(2)
 
         #
-        # Filesystem tools
+        # Find referenced step
         #
 
-        if tool == "list_directory":
-            arguments.setdefault("path", "/app/docs")
+        for result in previous_results:
 
-        elif tool == "directory_tree":
-            arguments.setdefault("path", "/app/docs")
+            if result["id"] != step_id:
+                continue
 
-        elif tool == "search_files":
-            arguments.setdefault("path", "/app/docs")
-
-        elif tool == "read_text_file":
-            arguments.setdefault("head", 200)
-
-        #
-        # Docker tools
-        #
-
-        elif tool in (
-            "inspect_container",
-            "start_container",
-            "stop_container",
-            "container_logs",
-        ):
+            data = result["result"]
 
             #
-            # GPT may return:
-            #
-            # container
-            # container_name
-            # name
+            # JSON string
             #
 
-            if "name" not in arguments:
+            if isinstance(data, str):
 
-                if "container" in arguments:
-                    arguments["name"] = arguments.pop("container")
+                try:
+                    data = json.loads(data)
+                except Exception:
+                    return value
 
-                elif "container_name" in arguments:
-                    arguments["name"] = arguments.pop("container_name")
+            #
+            # List
+            #
 
-        if tool == "container_logs":
-            arguments.setdefault("tail", 50)
+            if isinstance(data, list):
 
-        return arguments
+                if not data:
+                    return None
+
+                data = data[0]
+
+                if isinstance(data, str):
+
+                    try:
+                        data = json.loads(data)
+                    except Exception:
+                        return value
+
+            #
+            # Dictionary
+            #
+
+            if isinstance(data, dict):
+
+                return data.get(field)
+
+        #
+        # Placeholder couldn't be resolved
+        #
+
+        return value

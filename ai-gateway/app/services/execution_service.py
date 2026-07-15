@@ -1,6 +1,9 @@
+import asyncio
+
 from app.services.tool_router import ToolRouter
 from app.services.dependency_executor import DependencyExecutor
-import json
+from app.services.argument_resolver import ArgumentResolver
+
 
 class ExecutionService:
 
@@ -12,47 +15,88 @@ class ExecutionService:
         plan,
     ):
 
+        execution_levels = DependencyExecutor.build(plan)
+
+        print("\nExecution Levels\n")
+        print(execution_levels)
+
         results = []
 
-        for step in plan:
+        for level in execution_levels:
 
-            resolved = DependencyExecutor.resolve(
-                [step],
-                results,
-            )[0]
+            #
+            # Resolve arguments using outputs
+            # from previous execution levels.
+            #
 
-            response = await self.router.execute(
-                server=resolved["server"],
-                tool=resolved["tool"],
-                arguments=resolved["arguments"],
+            resolved_level = []
+
+            for step in level:
+
+                resolved_step = step.copy()
+
+                resolved_step["arguments"] = ArgumentResolver.resolve(
+                    step.get(
+                        "arguments",
+                        {},
+                    ),
+                    results,
+                )
+
+                resolved_level.append(
+                    resolved_step
+                )
+
+            print("\nExecuting Level\n")
+            print(resolved_level)
+
+            tasks = [
+                self.execute_step(step)
+                for step in resolved_level
+            ]
+
+            level_results = await asyncio.gather(
+                *tasks,
+                return_exceptions=False,
             )
 
-            output = self.extract_output(response)
-
-            results.append(
-                {
-                    "server": resolved["server"],
-                    "tool": resolved["tool"],
-                    "result": output,
-                }
-            )
+            results.extend(level_results)
 
         print("\nExecution Results\n")
-        from pprint import pprint
-        pprint(results)
+        print(results)
 
         return results
+
+    async def execute_step(
+        self,
+        step,
+    ):
+
+        response = await self.router.execute(
+            server=step["server"],
+            tool=step["tool"],
+            arguments=step.get(
+                "arguments",
+                {},
+            ),
+        )
+
+        output = self.extract_output(response)
+
+        return {
+            "id": step["id"],
+            "server": step["server"],
+            "tool": step["tool"],
+            "result": output,
+        }
 
     def extract_output(
         self,
         response,
     ):
-        """
-        Convert MCP response into native Python objects.
-        """
 
         #
-        # FastMCP returns content blocks.
+        # MCP Content blocks
         #
 
         if hasattr(response, "content"):
@@ -61,40 +105,38 @@ class ExecutionService:
 
             for block in response.content:
 
-                #
-                # Structured JSON
-                #
-
-                if hasattr(block, "data"):
-
-                    values.append(block.data)
-                    continue
-
-                #
-                # Older MCP versions
-                #
-
-                if hasattr(block, "json"):
-
-                    values.append(block.json)
-                    continue
-
-                #
-                # Text response
-                #
-
                 if hasattr(block, "text"):
 
                     values.append(block.text)
-                    continue
+
+            #
+            # Single object
+            #
 
             if len(values) == 1:
+
                 return values[0]
 
             return values
 
         #
-        # Already decoded
+        # Dictionary
         #
 
-        return response
+        if isinstance(
+            response,
+            dict,
+        ):
+            return response
+
+        #
+        # List
+        #
+
+        if isinstance(
+            response,
+            list,
+        ):
+            return response
+
+        return str(response)

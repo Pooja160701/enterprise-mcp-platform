@@ -1,53 +1,91 @@
-from copy import deepcopy
+from collections import defaultdict
 
 
 class DependencyExecutor:
     """
-    Resolves dependencies between execution steps.
+    Groups execution steps by dependency level.
 
-    Example:
+    Example
 
-    Step 2:
-        "$step1.repository"
+    Step 1
+      ↓
+    Step 2   Step 3
+      ↓         ↓
+         Step 4
 
     becomes
 
-    "enterprise-mcp-platform"
+    [
+        [step1],
+        [step2, step3],
+        [step4]
+    ]
     """
 
     @staticmethod
-    def resolve(plan, previous_results):
+    def build(plan):
 
-        resolved = deepcopy(plan)
+        step_map = {
+            step["id"]: step
+            for step in plan
+        }
 
-        for step in resolved:
+        indegree = {}
+        graph = defaultdict(list)
 
-            arguments = step.get("arguments", {})
+        for step in plan:
 
-            for key, value in arguments.items():
+            deps = step.get("depends_on", [])
 
-                if not isinstance(value, str):
-                    continue
+            indegree[step["id"]] = len(deps)
 
-                if not value.startswith("$step"):
-                    continue
+            for dep in deps:
+                graph[dep].append(step["id"])
 
-                #
-                # Example:
-                #
-                # $step1.repository
-                #
+        queue = []
 
-                left, field = value[1:].split(".")
+        for step in plan:
 
-                index = int(
-                    left.replace("step", "")
-                ) - 1
+            if indegree[step["id"]] == 0:
+                queue.append(step["id"])
 
-                result = previous_results[index]
+        levels = []
 
-                if isinstance(result, dict):
+        while queue:
 
-                    arguments[key] = result.get(field)
+            current_level = []
 
-        return resolved
+            next_queue = []
+
+            for node in queue:
+
+                current_level.append(
+                    step_map[node]
+                )
+
+                for child in graph[node]:
+
+                    indegree[child] -= 1
+
+                    if indegree[child] == 0:
+                        next_queue.append(child)
+
+            levels.append(current_level)
+
+            queue = next_queue
+
+        return levels
+
+    @staticmethod
+    def resolve(level, previous_results):
+        """
+        Placeholder.
+
+        Later we'll replace references such as
+
+        $1.name
+
+        with the actual output from step 1.
+        """
+
+        return level

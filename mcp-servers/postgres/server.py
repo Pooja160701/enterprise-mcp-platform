@@ -61,9 +61,4 @@ def run_select_query_tool(sql: str):
 
 
 if __name__ == "__main__":
-
-    print("=" * 60)
-    print("Starting PostgreSQL MCP Server...")
-    print("=" * 60)
-
-    mcp.run(transport="stdio")
+    mcp.run()

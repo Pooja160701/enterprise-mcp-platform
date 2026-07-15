@@ -147,13 +147,13 @@ Tool Output:
 
         return response.output_text
 
-    async def chat(
+    async def complete(
         self,
         prompt: str,
     ):
         """
-        Generic prompt interface used by the Planner.
-        Returns raw text.
+        Generic completion API used by planners,
+        classifiers and other services.
         """
 
         response = await self.client.responses.create(
@@ -162,3 +162,14 @@ Tool Output:
         )
 
         return response.output_text
+
+
+    async def chat(
+        self,
+        prompt: str,
+    ):
+        """
+        Backward compatibility.
+        """
+
+        return await self.complete(prompt)

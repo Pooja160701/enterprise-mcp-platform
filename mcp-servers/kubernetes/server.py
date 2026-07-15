@@ -48,11 +48,4 @@ def list_services(namespace: str = "default"):
 
 
 if __name__ == "__main__":
-
-    print("=" * 60)
-    print("Starting Kubernetes MCP Server...")
-    print("Transport : stdio")
-    print("Server    : Kubernetes MCP")
-    print("=" * 60)
-
-    mcp.run(transport="stdio")
+    mcp.run()

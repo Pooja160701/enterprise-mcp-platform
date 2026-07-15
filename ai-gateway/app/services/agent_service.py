@@ -148,9 +148,7 @@ class AgentService:
 
         for tool in all_tools:
 
-            print(
-                f'{tool["server"]} -> {tool["name"]}'
-            )
+            print(f'{tool["server"]} -> {tool["name"]}')
 
         #
         # ---------------------------------------------
@@ -167,9 +165,7 @@ class AgentService:
 
         for tool in candidate_tools:
 
-            print(
-                f'{tool["server"]} -> {tool["name"]}'
-            )
+            print(f'{tool["server"]} -> {tool["name"]}')
 
         #
         # ------------------------------------------------
@@ -195,12 +191,12 @@ class AgentService:
 
             print("\nUsing Planner...\n")
 
-            plan = await self.planner.create_plan(
-                message=message,
-                tools=candidate_tools,
-            )
+        plan = await self.planner.create_plan(
+            user_message=message,
+            candidate_tools=candidate_tools,
+        )
 
-        print("\nExecution Plan\n")
+        print("\nPlanner Output\n")
 
         print(
             json.dumps(
@@ -210,33 +206,6 @@ class AgentService:
         )
 
         telemetry.end_step("tool_selection")
-
-        #
-        # ------------------------------------------------
-        # Resolve Arguments
-        # ------------------------------------------------
-        #
-
-        for step in plan:
-
-            step["arguments"] = ArgumentResolver.resolve(
-
-                step["tool"],
-
-                step.get(
-                    "arguments",
-                    {},
-                ),
-            )
-
-        print("\nResolved Plan\n")
-
-        print(
-            json.dumps(
-                plan,
-                indent=2,
-            )
-        )
 
         #
         # ------------------------------------------------
@@ -316,9 +285,7 @@ class AgentService:
 
         answer = await self.openai.summarize_result(
             user_message=message,
-            tool_name=", ".join(
-                step["tool"] for step in plan
-            ),
+            tool_name=", ".join(step["tool"] for step in plan),
             tool_result=tool_text,
         )
 
@@ -327,75 +294,37 @@ class AgentService:
         execution = telemetry.finish()
 
         return {
-
             "conversation": conversation,
-
             "answer": answer,
-
             "execution": {
-
                 "status": "success",
-
                 "duration_ms": execution["total"],
-
-                "server": ", ".join(
-                    step["server"] for step in plan
-                ),
-
-                "tool": ", ".join(
-                    step["tool"] for step in plan
-                ),
-
+                "server": ", ".join(step["server"] for step in plan),
+                "tool": ", ".join(step["tool"] for step in plan),
                 "started_at": execution["started_at"],
-
                 "completed_at": execution["completed_at"],
-
             },
-
             "steps": [
-
                 {
-
                     "id": 1,
-
                     "title": "Planning",
-
                     "description": f"Planned {len(plan)} step(s).",
-
                     "status": "completed",
-
                     "duration_ms": execution["steps"]["tool_selection"],
-
                 },
-
                 {
-
                     "id": 2,
-
                     "title": "Execution",
-
                     "description": f"Executed {len(results)} tool(s).",
-
                     "status": "completed",
-
                     "duration_ms": execution["steps"]["tool_execution"],
-
                 },
-
                 {
-
                     "id": 3,
-
                     "title": "Response",
-
                     "description": "Generated final AI response.",
-
                     "status": "completed",
-
                     "duration_ms": execution["steps"]["response_generation"],
-
                 },
-
             ],
-
         }

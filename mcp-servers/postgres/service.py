@@ -40,14 +40,6 @@ class PostgreSQLService:
 
     def connection(self):
 
-        print({
-            "host": self.host,
-            "port": self.port,
-            "database": self.database,
-            "user": self.user,
-            "password": self.password,
-        })
-
         return psycopg.connect(
             host=self.host,
             port=self.port,

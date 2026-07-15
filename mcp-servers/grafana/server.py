@@ -42,9 +42,4 @@ def list_alerts_tool():
 
 
 if __name__ == "__main__":
-
-    print("=" * 60)
-    print("Starting Grafana MCP Server...")
-    print("=" * 60)
-
-    mcp.run(transport="stdio")
+    mcp.run()

@@ -1,4 +1,5 @@
 from typing import Any
+import json
 
 
 class ResultAggregator:
@@ -17,6 +18,43 @@ class ResultAggregator:
             "results": results,
         }
 
+    @staticmethod
+    def normalize(data):
+        """
+        Convert MCP responses into Python objects.
+        """
+
+        if isinstance(data, str):
+
+            try:
+                return json.loads(data)
+            except Exception:
+                return data
+
+        if isinstance(data, list):
+
+            normalized = []
+
+            for item in data:
+
+                if isinstance(item, str):
+
+                    try:
+                        normalized.append(
+                            json.loads(item)
+                        )
+
+                    except Exception:
+
+                        normalized.append(item)
+
+                else:
+
+                    normalized.append(item)
+
+            return normalized
+
+        return data
 
     @staticmethod
     def to_prompt(results: list[dict]) -> str:
@@ -27,8 +65,9 @@ class ResultAggregator:
 
             server = result["server"]
             tool = result["tool"]
-            data = result["result"]
-
+            data = ResultAggregator.normalize(
+                result["result"]
+            )
             lines.append(f"Server: {server}")
             lines.append(f"Tool: {tool}")
 

@@ -97,11 +97,4 @@ def list_workflows(repository: str):
 
 
 if __name__ == "__main__":
-
-    print("=" * 60)
-    print("Starting GitHub MCP Server...")
-    print("Transport : stdio")
-    print("Server    : GitHub MCP")
-    print("=" * 60)
-
-    mcp.run(transport="stdio")
+    mcp.run()

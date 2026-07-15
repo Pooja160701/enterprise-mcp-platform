@@ -23,6 +23,44 @@ class GitHubService:
 
         self.client = Github(token)
 
+        #
+        # Default owner
+        #
+        self.owner = (
+            os.getenv("GITHUB_OWNER")
+            or self.client.get_user().login
+        )
+
+    #
+    # -----------------------------------------
+    # Helpers
+    # -----------------------------------------
+    #
+
+    def get_repo(self, repository: str):
+
+        #
+        # Allow either:
+        #
+        # enterprise-mcp-platform
+        #
+        # or
+        #
+        # Pooja160701/enterprise-mcp-platform
+        #
+
+        if "/" not in repository:
+
+            repository = f"{self.owner}/{repository}"
+
+        return self.client.get_repo(repository)
+
+    #
+    # -----------------------------------------
+    # Repositories
+    # -----------------------------------------
+    #
+
     def list_repositories(self):
 
         repos = []
@@ -46,7 +84,7 @@ class GitHubService:
         repository: str,
     ):
 
-        repo = self.client.get_repo(repository)
+        repo = self.get_repo(repository)
 
         return {
 
@@ -70,12 +108,18 @@ class GitHubService:
 
         }
 
+    #
+    # -----------------------------------------
+    # Branches
+    # -----------------------------------------
+    #
+
     def list_branches(
         self,
         repository: str,
     ):
 
-        repo = self.client.get_repo(repository)
+        repo = self.get_repo(repository)
 
         branches = []
 
@@ -89,12 +133,18 @@ class GitHubService:
 
         return branches
 
+    #
+    # -----------------------------------------
+    # Commits
+    # -----------------------------------------
+    #
+
     def latest_commit(
         self,
         repository: str,
     ):
 
-        repo = self.client.get_repo(repository)
+        repo = self.get_repo(repository)
 
         commit = repo.get_commits()[0]
 
@@ -110,12 +160,18 @@ class GitHubService:
 
         }
 
+    #
+    # -----------------------------------------
+    # Issues
+    # -----------------------------------------
+    #
+
     def list_issues(
         self,
         repository: str,
     ):
 
-        repo = self.client.get_repo(repository)
+        repo = self.get_repo(repository)
 
         issues = []
 
@@ -141,7 +197,7 @@ class GitHubService:
         body: str = "",
     ):
 
-        repo = self.client.get_repo(repository)
+        repo = self.get_repo(repository)
 
         issue = repo.create_issue(
             title=title,
@@ -164,7 +220,7 @@ class GitHubService:
         issue_number: int,
     ):
 
-        repo = self.client.get_repo(repository)
+        repo = self.get_repo(repository)
 
         issue = repo.get_issue(issue_number)
 
@@ -178,12 +234,18 @@ class GitHubService:
 
         }
 
+    #
+    # -----------------------------------------
+    # Pull Requests
+    # -----------------------------------------
+    #
+
     def list_pull_requests(
         self,
         repository: str,
     ):
 
-        repo = self.client.get_repo(repository)
+        repo = self.get_repo(repository)
 
         pulls = []
 
@@ -199,12 +261,18 @@ class GitHubService:
 
         return pulls
 
+    #
+    # -----------------------------------------
+    # Workflows
+    # -----------------------------------------
+    #
+
     def list_workflows(
         self,
         repository: str,
     ):
 
-        repo = self.client.get_repo(repository)
+        repo = self.get_repo(repository)
 
         workflows = repo.get_workflows()
 

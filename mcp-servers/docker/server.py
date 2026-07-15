@@ -63,10 +63,4 @@ def stop_container(name: str):
 
 
 if __name__ == "__main__":
-    print("=" * 60)
-    print("Starting Docker MCP Server")
-    print("Transport : stdio")
-    print("Server    : Docker MCP")
-    print("=" * 60)
-
-    mcp.run(transport="stdio")
+    mcp.run()
